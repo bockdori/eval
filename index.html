@@ -1,0 +1,68 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>엔트리 + ChatGPT 응답 머신</title>
+  </head>
+  <body>
+    <h1>엔트리 + ChatGPT 응답 머신</h1>
+
+    <!-- 1. 엔트리 프로젝트를 iframe으로 삽입 -->
+    <!-- 여기 PROJECT_ID 부분을 네 엔트리 프로젝트 ID로 바꿔야 함 -->
+    <iframe
+      id="entry-frame"
+      src="https://playentry.org/project/여기에_프로젝트_ID"
+      width="960"
+      height="540"
+      frameborder="0"
+      allowfullscreen
+    ></iframe>
+
+    <!-- 2. 브로커 JS: 엔트리 ↔ Django 백엔드 (/entry-chat/) -->
+    <script>
+      const entryFrame = document.getElementById("entry-frame");
+
+      // 상위 페이지에서 엔트리가 보낸 postMessage 받기
+      window.addEventListener("message", async (event) => {
+        // 타입 필터링: 엔트리에서 보내는 것만 처리
+        if (!event.data || event.data.type !== "ENTRY_TO_JS") return;
+
+        const question = event.data.text;
+        console.log("엔트리에서 받은 질문:", question);
+
+        try {
+          // 1) Django 프록시 서버로 전송
+          const res = await fetch("/entry-chat/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: question }),
+          });
+
+          const data = await res.json();
+          const answer = data.reply || "응답을 만들지 못했어요.";
+
+          console.log("서버 응답:", answer);
+
+          // 2) 다시 엔트리 iframe으로 응답 보내기
+          entryFrame.contentWindow.postMessage(
+            {
+              type: "JS_TO_ENTRY",
+              text: answer,
+            },
+            "*"
+          );
+        } catch (e) {
+          console.error("프록시 호출 에러:", e);
+          entryFrame.contentWindow.postMessage(
+            {
+              type: "JS_TO_ENTRY",
+              text: "오류가 발생했어요. 잠시 후 다시 시도해 주세요.",
+            },
+            "*"
+          );
+        }
+      });
+    </script>
+  </body>
+</html>
